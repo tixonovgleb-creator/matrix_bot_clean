@@ -161,27 +161,31 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = str(message.from_user.id)
-    
+
     # Инициализация пользователя
     if user_id not in users["stars"]:
         users["stars"][user_id] = 0
         users["invited_by"][user_id] = None
         users["used_refs"][user_id] = []
-    
+
     # Обработка реферальной ссылки
     args = message.text.split()
+    referrer_id = None
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
-        if referrer_id != user_id and user_id not in users["used_refs"].get(referrer_id, []):
-            users["stars"][referrer_id] = users["stars"].get(referrer_id, 0) + 5
-            users["used_refs"].setdefault(referrer_id, []).append(user_id)
-            users["invited_by"][user_id] = referrer_id
-            save_users(users)
-            try:
-                await bot.send_message(int(referrer_id), f"🎉 +5 звёзд! Ваш друг {message.from_user.first_name} прошёл квест.")
-            except:
-                pass
-    
+    elif len(args) > 1 and args[1].startswith("ref-"):  # На всякий случай
+        referrer_id = args[1].replace("ref-", "")
+
+    if referrer_id and referrer_id != user_id and user_id not in users["used_refs"].get(referrer_id, []):
+        users["stars"][referrer_id] = users["stars"].get(referrer_id, 0) + 5
+        users["used_refs"].setdefault(referrer_id, []).append(user_id)
+        users["invited_by"][user_id] = referrer_id
+        save_users(users)
+        try:
+            await bot.send_message(int(referrer_id), f"🎉 +5 звёзд! Ваш друг {message.from_user.first_name} прошёл квест.")
+        except Exception as e:
+            print(f"Не удалось уведомить {referrer_id}: {e}")
+
     save_users(users)
     await message.answer("Привет! Напиши свою дату рождения в формате ДД.ММ.ГГГГ, например: 07.09.1971")
 

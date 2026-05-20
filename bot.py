@@ -23,6 +23,7 @@ Thread(target=run_server, daemon=True).start()
 
 # ========== ТОКЕН ОСНОВНОГО БОТА ==========
 BOT_TOKEN = "8350356789:AAHjJ_xBnUj11Su4LW_NqcgxZrr2OFkymvI" 
+ADMIN_ID = 5833372655  
 
 # ========== ХРАНИЛИЩЕ ПОЛЬЗОВАТЕЛЕЙ ==========
 USERS_FILE = "users.json"
@@ -158,34 +159,26 @@ menu_inline = InlineKeyboardMarkup(inline_keyboard=[
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# ========== ОСНОВНЫЕ КОМАНДЫ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = str(message.from_user.id)
-
-    # Инициализация пользователя
     if user_id not in users["stars"]:
         users["stars"][user_id] = 0
         users["invited_by"][user_id] = None
         users["used_refs"][user_id] = []
-
-    # Обработка реферальной ссылки
     args = message.text.split()
-    referrer_id = None
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
-    elif len(args) > 1 and args[1].startswith("ref-"):  # На всякий случай
-        referrer_id = args[1].replace("ref-", "")
-
-    if referrer_id and referrer_id != user_id and user_id not in users["used_refs"].get(referrer_id, []):
-        users["stars"][referrer_id] = users["stars"].get(referrer_id, 0) + 5
-        users["used_refs"].setdefault(referrer_id, []).append(user_id)
-        users["invited_by"][user_id] = referrer_id
-        save_users(users)
-        try:
-            await bot.send_message(int(referrer_id), f"🎉 +5 звёзд! Ваш друг {message.from_user.first_name} прошёл квест.")
-        except Exception as e:
-            print(f"Не удалось уведомить {referrer_id}: {e}")
-
+        if referrer_id and referrer_id != user_id and user_id not in users["used_refs"].get(referrer_id, []):
+            users["stars"][referrer_id] = users["stars"].get(referrer_id, 0) + 5
+            users["used_refs"].setdefault(referrer_id, []).append(user_id)
+            users["invited_by"][user_id] = referrer_id
+            save_users(users)
+            try:
+                await bot.send_message(int(referrer_id), f"🎉 +5 звёзд! Ваш друг {message.from_user.first_name} прошёл квест.")
+            except:
+                pass
     save_users(users)
     await message.answer("Привет! Напиши свою дату рождения в формате ДД.ММ.ГГГГ, например: 07.09.1971")
 
@@ -197,17 +190,12 @@ async def handle_date(message: types.Message):
         day, month, year = map(int, message.text.strip().split('.'))
         datetime(year, month, day)
         nums = calculate_numbers(message.text.strip())
-        
         user_id = str(message.from_user.id)
         if user_id not in users["stars"]:
             users["stars"][user_id] = 0
-            save_users(users)
-        
-        # Начисляем 15 звёзд за прохождение квеста (только один раз)
         if users["stars"].get(user_id, 0) == 0:
             users["stars"][user_id] = 15
             save_users(users)
-        
         for idx, num in enumerate(nums, 1):
             card = cards.get(num, {"title": "Неизвестная карта", "plus": "", "minus": "", "advice": ""})
             text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
@@ -224,7 +212,6 @@ async def handle_date(message: types.Message):
 async def handle_callback(callback: types.CallbackQuery):
     user_id = str(callback.from_user.id)
     stars = users["stars"].get(user_id, 0)
-    
     if callback.data == "gifts":
         if stars >= 100:
             text = "🎁 Поздравляю! У тебя 100+ звёзд. Напиши @manager для получения полной консультации."
@@ -235,17 +222,80 @@ async def handle_callback(callback: types.CallbackQuery):
         else:
             text = f"🎁 У тебя {stars} звёзд. Чтобы получить подарки, нужно минимум 30 звёзд. Приглашай друзей и зарабатывай!"
         await callback.message.answer(text)
-    
     elif callback.data == "invite":
         bot_info = await bot.get_me()
         link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
         await callback.message.answer(f"👥 Отправь другу эту ссылку:\n{link}\nКогда друг пройдёт первый ключ, ты получишь +5 звёзд.")
-    
     await callback.answer()
 
+# ========== АДМИН-КОМАНДЫ (ТОЛЬКО ДЛЯ ЗАКАЗЧИКА) ==========
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
+
+@dp.message(Command("admin_help"))
+async def admin_help(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        "👑 Команды для админа:\n"
+        "/admin_stats — статистика пользователей\n"
+        "/admin_broadcast [текст] — рассылка всем\n"
+        "/admin_edit_card [номер] [plus/minus/advice] [новый текст] — редактировать карту\n"
+        "/admin_help — это меню"
+    )
+
+@dp.message(Command("admin_stats"))
+async def admin_stats(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    total_users = len(users["stars"])
+    total_stars = sum(users["stars"].values())
+    await message.answer(f"📊 Статистика:\nВсего пользователей: {total_users}\nВсего звёзд: {total_stars}")
+
+@dp.message(Command("admin_broadcast"))
+async def admin_broadcast(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    text = message.text.replace("/admin_broadcast", "").strip()
+    if not text:
+        await message.answer("Напиши текст после /admin_broadcast")
+        return
+    sent = 0
+    for uid in users["stars"].keys():
+        try:
+            await bot.send_message(int(uid), f"📢 Админ: {text}")
+            sent += 1
+            await asyncio.sleep(0.05)
+        except:
+            pass
+    await message.answer(f"Рассылка завершена. Отправлено {sent} из {len(users['stars'])}")
+
+@dp.message(Command("admin_edit_card"))
+async def admin_edit_card(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    parts = message.text.split(maxsplit=3)
+    if len(parts) < 4:
+        await message.answer("Формат: /admin_edit_card [номер] [plus/minus/advice] [новый текст]")
+        return
+    try:
+        num = int(parts[1])
+        field = parts[2]
+        new_text = parts[3]
+        if field not in ["plus", "minus", "advice"]:
+            await message.answer("Можно менять только plus, minus, advice")
+            return
+        if num not in cards:
+            await message.answer(f"Нет карты с номером {num}")
+            return
+        cards[num][field] = new_text
+        await message.answer(f"✅ Карта {num} обновлена (поле {field})")
+    except:
+        await message.answer("Ошибка. Пример: /admin_edit_card 7 plus Новый текст")
+
 async def main():
-    print("Бот с рефералами и звёздами запущен")
+    print("Бот с рефералами, звёздами и админ-панелью запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main()) 

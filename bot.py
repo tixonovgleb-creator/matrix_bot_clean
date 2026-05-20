@@ -1,5 +1,6 @@
 import asyncio
 import os
+import json
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from aiogram import Bot, Dispatcher, types
@@ -20,10 +21,25 @@ def run_server():
 
 Thread(target=run_server, daemon=True).start()
 
-# ========== ТОКЕН ==========
-BOT_TOKEN = "8350356789:AAHjJ_xBnUj11Su4LW_NqcgxZrr2OFkymvI"
+# ========== ТОКЕН ОСНОВНОГО БОТА ==========
+BOT_TOKEN = "8488779944:AAHzYpl_YpkcnUqW1V_DTWTKzE7FrGHSns"  # Замени на свой, если отличается
 
-# ========== СЛОВАРЬ КАРТ (22 карты) ==========
+# ========== ХРАНИЛИЩЕ ПОЛЬЗОВАТЕЛЕЙ ==========
+USERS_FILE = "users.json"
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    return {"stars": {}, "invited_by": {}, "used_refs": {}}
+
+def save_users(data):
+    with open(USERS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+users = load_users()
+
+# ========== СЛОВАРЬ КАРТ (22 КАРТЫ) ==========
 cards = {
     1: {"title": "МАГ — Волшебник",
         "plus": "Вы — человек, который умеет начинать. Не откладывать, не ждать подходящего момента, а просто взять и сделать. В вас есть та редкая внутренняя ось, которая держит вас вертикально, когда всё вокруг шатается. Людей рядом с вами притягивает не громкость, а точность — вы говорите ровно то, что нужно, и делаете ровно то, что обещаете.\n\nВ отношениях вы даёте человеку ощущение надёжного плеча — не растворяясь, оставаясь собой. В работе вы видите задачу насквозь и знаете, с какого конца за неё браться. С собой вы честны: знаете, чего хотите, и не тратите время на то, что вам не подходит.",
@@ -115,7 +131,6 @@ cards = {
         "advice": "Шаг, который вы откладываете, потому что не знаете, чем он закончится — именно он и изменит всё."}
 }
 
-# ========== ФУНКЦИИ РАСЧЁТА ==========
 def reduce_to_range(n):
     while n > 22:
         n = sum(int(d) for d in str(n))
@@ -140,12 +155,34 @@ menu_inline = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📢 Телеграм-канал", url="https://t.me/Tana_Turkova_DeloDushi")],
 ])
 
-# ========== ОСНОВНОЙ БОТ ==========
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
+    user_id = str(message.from_user.id)
+    
+    # Инициализация пользователя
+    if user_id not in users["stars"]:
+        users["stars"][user_id] = 0
+        users["invited_by"][user_id] = None
+        users["used_refs"][user_id] = []
+    
+    # Обработка реферальной ссылки
+    args = message.text.split()
+    if len(args) > 1 and args[1].startswith("ref_"):
+        referrer_id = args[1].replace("ref_", "")
+        if referrer_id != user_id and user_id not in users["used_refs"].get(referrer_id, []):
+            users["stars"][referrer_id] = users["stars"].get(referrer_id, 0) + 5
+            users["used_refs"].setdefault(referrer_id, []).append(user_id)
+            users["invited_by"][user_id] = referrer_id
+            save_users(users)
+            try:
+                await bot.send_message(int(referrer_id), f"🎉 +5 звёзд! Ваш друг {message.from_user.first_name} прошёл квест.")
+            except:
+                pass
+    
+    save_users(users)
     await message.answer("Привет! Напиши свою дату рождения в формате ДД.ММ.ГГГГ, например: 07.09.1971")
 
 @dp.message()
@@ -156,6 +193,17 @@ async def handle_date(message: types.Message):
         day, month, year = map(int, message.text.strip().split('.'))
         datetime(year, month, day)
         nums = calculate_numbers(message.text.strip())
+        
+        user_id = str(message.from_user.id)
+        if user_id not in users["stars"]:
+            users["stars"][user_id] = 0
+            save_users(users)
+        
+        # Начисляем 15 звёзд за прохождение квеста (только один раз)
+        if users["stars"].get(user_id, 0) == 0:
+            users["stars"][user_id] = 15
+            save_users(users)
+        
         for idx, num in enumerate(nums, 1):
             card = cards.get(num, {"title": "Неизвестная карта", "plus": "", "minus": "", "advice": ""})
             text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
@@ -164,24 +212,35 @@ async def handle_date(message: types.Message):
             if os.path.exists(img_path):
                 photo = FSInputFile(img_path)
                 await message.answer_photo(photo)
-            else:
-                await message.answer(f"Картинка для {num} не найдена")
-        await message.answer("Ты собрала все 5 ключей! Что дальше? Выбирай в меню.", reply_markup=menu_inline)
+        await message.answer(f"Ты собрала все 5 ключей! У тебя {users['stars'].get(user_id, 0)} звёзд.\nЧто дальше? Выбирай в меню.", reply_markup=menu_inline)
     except Exception:
         await message.answer("Неправильный формат или несуществующая дата. Попробуй ещё: ДД.ММ.ГГГГ")
 
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
+    user_id = str(callback.from_user.id)
+    stars = users["stars"].get(user_id, 0)
+    
     if callback.data == "gifts":
-        await callback.message.answer("🎁 Подарки за звёзды пока в разработке. Следите за обновлениями!")
+        if stars >= 100:
+            text = "🎁 Поздравляю! У тебя 100+ звёзд. Напиши @manager для получения полной консультации."
+        elif stars >= 50:
+            text = "🎁 У тебя 50+ звёзд. Ты можешь получить консультацию по совместимости. Напиши @manager."
+        elif stars >= 30:
+            text = "🎁 У тебя 30+ звёзд. Ты можешь получить расчёт родовых задач. Напиши @manager."
+        else:
+            text = f"🎁 У тебя {stars} звёзд. Чтобы получить подарки, нужно минимум 30 звёзд. Приглашай друзей и зарабатывай!"
+        await callback.message.answer(text)
+    
     elif callback.data == "invite":
         bot_info = await bot.get_me()
-        link = f"https://t.me/{bot_info.username}?start=ref"
-        await callback.message.answer(f"👥 Отправь другу эту ссылку:\n{link}\nКогда друг пройдёт первый ключ, ты получишь +5 звёзд (функция в разработке).")
+        link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+        await callback.message.answer(f"👥 Отправь другу эту ссылку:\n{link}\nКогда друг пройдёт первый ключ, ты получишь +5 звёзд.")
+    
     await callback.answer()
 
 async def main():
-    print("Бот запущен")
+    print("Бот с рефералами и звёздами запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

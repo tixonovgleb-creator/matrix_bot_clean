@@ -22,7 +22,7 @@ def run_server():
 Thread(target=run_server, daemon=True).start()
 
 # ========== ТОКЕН ОСНОВНОГО БОТА ==========
-BOT_TOKEN = "8488779944:AAHzYpl_YpkcnUqW1V_DTWTKzE7FrGHSns"  # Замени на свой, если отличается
+BOT_TOKEN = "8350356789:AAHjJ_xBnUj11Su4LW_NqcgxZrr2OFkymvI" 
 
 # ========== ХРАНИЛИЩЕ ПОЛЬЗОВАТЕЛЕЙ ==========
 USERS_FILE = "users.json"

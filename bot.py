@@ -190,25 +190,37 @@ async def handle_date(message: types.Message):
         day, month, year = map(int, message.text.strip().split('.'))
         datetime(year, month, day)
         nums = calculate_numbers(message.text.strip())
+        
         user_id = str(message.from_user.id)
         if user_id not in users["stars"]:
             users["stars"][user_id] = 0
         if users["stars"].get(user_id, 0) == 0:
             users["stars"][user_id] = 15
             save_users(users)
+        
+        phrases = [
+            "✨ **1. Эта энергия — твой портрет.**",
+            "🔮 **2. Эта энергия — твой внутренний потенциал.**",
+            "💰 **3. Эта энергия существенно влияет на твою реализацию и финансы.**",
+            "🛤️ **4. Эта энергия раскрывает твой жизненный путь и главный урок.**",
+            "❤️ **5. Эта энергия раскрывает твою истинную суть и влияет на все сферы жизни.**"
+        ]
+        
         for idx, num in enumerate(nums, 1):
             card = cards.get(num, {"title": "Неизвестная карта", "plus": "", "minus": "", "advice": ""})
+            # Отправляем фразу
+            await message.answer(phrases[idx-1])
+            # Отправляем карту
             text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
             await message.answer(text)
             img_path = f"images/{num}.jpg"
             if os.path.exists(img_path):
                 photo = FSInputFile(img_path)
                 await message.answer_photo(photo)
+        
         await message.answer(f"Ты собрала все 5 ключей! У тебя {users['stars'].get(user_id, 0)} звёзд.\nЧто дальше? Выбирай в меню.", reply_markup=menu_inline)
     except Exception:
         await message.answer("Неправильный формат или несуществующая дата. Попробуй ещё: ДД.ММ.ГГГГ")
-
-@dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     user_id = str(callback.from_user.id)
     stars = users["stars"].get(user_id, 0)

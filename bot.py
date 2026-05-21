@@ -189,7 +189,6 @@ async def start(message: types.Message):
         "Для старта напишите свою дату рождения в следующем формате, например: 07.09.1971"
     )
     await message.answer(welcome_text)
-
 @dp.message()
 async def handle_date(message: types.Message):
     if message.text.startswith('/'):
@@ -206,6 +205,9 @@ async def handle_date(message: types.Message):
             users["stars"][user_id] = 15
             save_users(users)
         
+        # Приветственная фраза перед первым ключом
+        await message.answer("Отлично! Твой день рождения — это твой портрет, то, как тебя видят окружающие. Приготовься узнать о себе правду.")
+        
         phrases = [
             "✨ **1. Эта энергия — твой портрет.**",
             "🔮 **2. Эта энергия — твой внутренний потенциал.**",
@@ -216,9 +218,7 @@ async def handle_date(message: types.Message):
         
         for idx, num in enumerate(nums, 1):
             card = cards.get(num, {"title": "Неизвестная карта", "plus": "", "minus": "", "advice": ""})
-            # Отправляем фразу
             await message.answer(phrases[idx-1])
-            # Отправляем карту
             text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
             await message.answer(text)
             img_path = f"images/{num}.jpg"

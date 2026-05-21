@@ -205,8 +205,9 @@ async def handle_date(message: types.Message):
             users["stars"][user_id] = 15
             save_users(users)
         
-        # Приветственная фраза перед первым ключом
+        # Приветственная фраза
         await message.answer("Отлично! Твой день рождения — это твой портрет, то, как тебя видят окружающие. Приготовься узнать о себе правду.")
+        await asyncio.sleep(1.5)  # пауза 1.5 секунды
         
         phrases = [
             "✨ **1. Эта энергия — твой портрет.**",
@@ -218,13 +219,24 @@ async def handle_date(message: types.Message):
         
         for idx, num in enumerate(nums, 1):
             card = cards.get(num, {"title": "Неизвестная карта", "plus": "", "minus": "", "advice": ""})
+            # Отправляем фразу-пояснение
             await message.answer(phrases[idx-1])
-            text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
-            await message.answer(text)
+            await asyncio.sleep(1.0)  # пауза 1 секунда
+            
+            # Отправляем картинку
             img_path = f"images/{num}.jpg"
             if os.path.exists(img_path):
                 photo = FSInputFile(img_path)
                 await message.answer_photo(photo)
+            else:
+                await message.answer(f"🖼️ (картинка для {num} не найдена)")
+            await asyncio.sleep(1.0)  # пауза 1 секунда
+            
+            # Отправляем текст карты
+            text = f"{idx}. {card['title']}\n\n✨ {card['plus']}\n\n🌑 {card['minus']}\n\n💫 {card['advice']}"
+            await message.answer(text)
+            if idx < 5:
+                await asyncio.sleep(1.5)  # пауза перед следующим ключом
         
         await message.answer(f"Ты собрала все 5 ключей! У тебя {users['stars'].get(user_id, 0)} звёзд.\nЧто дальше? Выбирай в меню.", reply_markup=menu_inline)
     except Exception:
